@@ -4,7 +4,7 @@ from logging.handlers import RotatingFileHandler
 
 log_dir = "logs"
 
-def get_logger(name: str = "assistant", log_file: str = "logs/assistant.log") -> logging.Logger:
+def get_logger(name: str = "app", log_file: str = "logs/app.log") -> logging.Logger:
     os.makedirs(log_dir, exist_ok=True)
     logger = logging.getLogger(name)
     if logger.handlers:

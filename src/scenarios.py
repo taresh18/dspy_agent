@@ -60,8 +60,6 @@ class BankingUpdateSignature(dspy.Signature):
     scenario_complete: bool = dspy.OutputField(desc="Whether banking update is complete")
 
 
-# DSPy Modules for different scenarios
-
 class AccountBalanceModule(dspy.Module):
     """Module for handling account balance checks"""
     

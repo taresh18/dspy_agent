@@ -1,116 +1,57 @@
-"""
-Core modules for Sky Credit Voice Assistant
-Contains greeting, verification, closing and other core functionality.
-"""
-
 import dspy
-import json
-from typing import Dict
+from typing import Dict, Optional
 from .db import lookup_customer
 
-# Core DSPy Signatures
-class GreetingSignature(dspy.Signature):
-    """Generate the initial greeting for Sky Credit Group voice assistant"""
-    response: str = dspy.OutputField(desc="Greeting message following exact script: 'Thank you for calling the Sky Credit Group. My name is Jess, an automated AI voice assistant. Can I please have your name, and find out how I can assist you today?'")
-
-class VerificationHandlerSignature(dspy.Signature):
-    """Handle Sky Credit Group verification. Collect: reference number, first name, last name, date of birth."""
-    customer_input: str = dspy.InputField(desc="Customer's current response")
-    verification_data: str = dspy.InputField(desc="Already collected data as JSON: {reference_or_mobile, first_name, last_name, date_of_birth}")
+def lookup_customer_tool(reference_or_mobile: str, first_name: str, last_name: str) -> str:
+    """
+    Look up customer account information using reference number/mobile and name verification.
     
-    response: str = dspy.OutputField(desc="What to ask customer next or confirmation message")
-    updated_data: str = dspy.OutputField(desc="Updated verification data as JSON with any new info extracted")
-    is_complete: bool = dspy.OutputField(desc="True only if all 4 items collected: reference_or_mobile, first_name, last_name, date_of_birth")
-
-class CustomerLookupSignature(dspy.Signature):
-    """Look up customer in database using collected verification info"""
-    reference_number: str = dspy.InputField(desc="Customer reference number or mobile number")
-    first_name: str = dspy.InputField(desc="Customer first name")
-    last_name: str = dspy.InputField(desc="Customer last name")
-    
-    customer_found: bool = dspy.OutputField(desc="Whether customer was found in database")
-    customer_data: str = dspy.OutputField(desc="Customer account information as JSON string")
-
-class ClosingSignature(dspy.Signature):
-    """Handle the mandatory closing checklist"""
-    actions_summary: str = dspy.InputField(desc="Summary of actions taken during the call")
-    step_number: int = dspy.InputField(desc="Current closing step (1-4)")
-    customer_response: str = dspy.InputField(desc="Customer's response")
-    
-    response: str = dspy.OutputField(desc="Closing response following mandatory steps")
-    next_step: int = dspy.OutputField(desc="Next closing step")
-    call_complete: bool = dspy.OutputField(desc="Whether the call is complete")
-
-# Core DSPy Modules
-class GreetingModule(dspy.Module):
-    """Module for handling initial greeting"""
-    
-    def __init__(self):
-        super().__init__()
-        self.greeting = dspy.Predict(GreetingSignature)
-    
-    def forward(self):
-        result = self.greeting()
-        return result.response
-
-class VerificationModule(dspy.Module):
-    """Module for handling customer verification"""
-    
-    def __init__(self):
-        super().__init__()
-        self.verify = dspy.ChainOfThought(VerificationHandlerSignature)
-    
-    def forward(self, customer_input: str, verification_data: dict):
-        result = self.verify(
-            customer_input=customer_input,
-            verification_data=json.dumps(verification_data)
-        )
+    Args:
+        reference_or_mobile: Customer reference number or mobile number
+        first_name: Customer's first name
+        last_name: Customer's last name
         
-        # Parse updated data
-        try:
-            updated = json.loads(result.updated_data) if result.updated_data else {}
-        except:
-            updated = {}
-        
-        return {
-            "response": result.response,
-            "updated_data": updated,
-            "verification_complete": result.is_complete
-        }
+    Returns:
+        String with customer information or error message
+    """
+    customer = lookup_customer(reference_or_mobile, first_name, last_name)
     
-    def lookup_customer_data(self, verification_data: dict):
-        """Look up customer after verification is complete"""
-        ref = verification_data.get('reference_or_mobile', '')
-        fname = verification_data.get('first_name', '')
-        lname = verification_data.get('last_name', '')
-        
-        customer = lookup_customer(ref, fname, lname)
-        if customer:
-            return {
-                "customer_found": True,
-                "customer_data": customer
-            }
-        return {
-            "customer_found": False,
-            "customer_data": None
-        }
+    if customer:
+        return f"Customer found: {customer.firstName} {customer.lastName}. Account Balance: ${customer.accountBalance}, Next Payment: ${customer.minimumAmountDue} due {customer.nextPaymentDate}, Arrears: ${customer.arrearsBalance}, Days Past Due: {customer.daysPastDue}"
+    else:
+        return "Customer not found with provided details"
 
-class ClosingModule(dspy.Module):
-    """Module for handling call closing"""
+class SkyCreditVoiceAssistant(dspy.Signature):
+    """
+    You are Jess, an AI voice assistant for Sky Credit Group handling account inquiries and payment support.
     
-    def __init__(self):
-        super().__init__()
-        self.closing = dspy.Predict(ClosingSignature)
+    GREETING: "Thank you for calling the Sky Credit Group. My name is Jess, an automated AI voice assistant. Can I please have your name, and find out how I can assist you today?"
     
-    def forward(self, actions_summary: str, step: int, customer_response: str = ""):
-        result = self.closing(
-            actions_summary=actions_summary,
-            step_number=step,
-            customer_response=customer_response
-        )
-        
-        return {
-            "response": result.response,
-            "next_step": result.next_step,
-            "call_complete": result.call_complete
-        }
+    MANDATORY VERIFICATION (collect ALL before using lookup_customer tool):
+    - Customer reference number (or mobile if unknown)
+    - First name  
+    - Last name
+    - Date of birth
+    Then say "Thank you, I am just looking up your account now" and use lookup_customer tool
+    
+    AVAILABLE SCENARIOS after verification:
+    - ACCOUNT BALANCE CHECK: Provide current balance, next payment amount/date, ask about payment confirmation
+    - ARREARS MANAGEMENT: Present 3 options (full payment, split arrears, increase payments)
+    - PAYMENT DEFERRALS: Handle one-time or ongoing payment changes, 2 business days notice required
+    - HARDSHIP ASSISTANCE: Collect hardship reason, transfer to specialist team
+    - BANKING UPDATES: Collect new bank details, send email confirmation
+    - PORTAL ISSUES: Handle login problems while addressing main inquiry
+    
+    CLOSING CHECKLIST:
+    1. Summarize actions taken
+    2. Confirm follow-up actions 
+    3. Ask "Is there anything else I can help you with today?"
+    4. Thank customer and end call
+    
+    RULES: One question at a time, use lookup_customer after collecting all verification information.
+    """
+    customer_input: str = dspy.InputField(desc="What the customer just said")
+    history: dspy.History = dspy.InputField(desc="Conversation history")
+    
+    response: str = dspy.OutputField(desc="Assistant response following Sky Credit protocols")
+

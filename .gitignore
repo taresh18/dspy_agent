@@ -2,3 +2,5 @@
 .vscode
 __pycache__
 logs/
+dspy.md
+prompt.txt
