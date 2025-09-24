@@ -8,8 +8,8 @@ from typing import Optional, List
 import json
 from logger_config import get_logger
 
-# Set up testing agent logger with separate log file
-agent_logger = get_logger("testing_agent", "logs/testing_agent.log")
+# Use unified app logger
+logger = get_logger("testing_agent")
 
 class TestingAgentSignature(dspy.Signature):
     """Testing agent that simulates a customer calling Sky Credit Group"""
@@ -24,11 +24,11 @@ class TestingAgent:
     """Agent that simulates customer interactions for testing the voice assistant"""
     
     def __init__(self):
-        agent_logger.debug("Initializing TestingAgent")
+        logger.debug("Initializing TestingAgent")
         self.testing_agent = dspy.ChainOfThought(TestingAgentSignature)
         self.conversation_history = []
         self.conversation_ended = False
-        agent_logger.debug("TestingAgent initialized successfully")
+        logger.debug("TestingAgent initialized successfully")
         
         # Customer scenario details
         self.scenario_context = """
@@ -58,8 +58,8 @@ Instructions:
     
     def get_initial_message(self) -> str:
         """Get the initial customer message to start the conversation"""
-        agent_logger.debug("Getting initial customer message")
-        return "Hi, my name is Paul Walshe and I'd like to check my account balance"
+        logger.debug("Getting initial customer message")
+        return "Hello"
     
     def generate_response(self, assistant_message: str) -> Optional[str]:
         """Generate customer response to assistant message"""
@@ -80,7 +80,7 @@ Instructions:
             )
 
             if result.should_end_call:
-                agent_logger.info("Testing agent ending conversation")
+                logger.info("Testing agent ending conversation")
                 self.conversation_ended = True
                 return None
 
@@ -91,7 +91,7 @@ Instructions:
             return customer_response
 
         except Exception as e:
-            agent_logger.error(f"Testing Agent error: {str(e)}")
+            logger.error(f"Testing Agent error: {str(e)}")
             return "Could you please repeat that?"
     
     def is_conversation_ended(self) -> bool:
@@ -107,7 +107,7 @@ class ConversationEvaluator:
     """Evaluates conversation against expected outcomes"""
     
     def __init__(self):
-        agent_logger.debug("Initializing ConversationEvaluator")
+        logger.debug("Initializing ConversationEvaluator")
         self.evaluation_agent = dspy.ChainOfThought(
             "conversation_transcript, expected_outcomes -> evaluation_json: str"
         )
@@ -124,11 +124,11 @@ class ConversationEvaluator:
             "The main agent should confirm that the payment will process automatically",
             "The main agent should ask if there is anything else and thank the caller"
         ]
-        agent_logger.debug(f"Initialized with {len(self.expected_outcomes)} expected outcomes")
+        logger.debug(f"Initialized with {len(self.expected_outcomes)} expected outcomes")
     
     def evaluate_conversation(self, conversation_transcript: List[str]) -> dict:
         """Evaluate the conversation against expected outcomes"""
-        agent_logger.info(f"Evaluating conversation with {len(conversation_transcript)} messages")
+        logger.info(f"Evaluating conversation with {len(conversation_transcript)} messages")
 
         transcript_str = "\n".join(conversation_transcript)
         outcomes_str = "\n".join([f"{i+1}. {outcome}" for i, outcome in enumerate(self.expected_outcomes)])
@@ -141,9 +141,9 @@ class ConversationEvaluator:
 
             # Try to parse the JSON response
             evaluation = json.loads(result.evaluation_json)
-            agent_logger.info(f"Evaluation completed")
+            logger.info(f"Evaluation completed")
             return evaluation
 
         except Exception as e:
-            agent_logger.error(f"Evaluation error: {str(e)}")
+            logger.error(f"Evaluation error: {str(e)}")
             return {"error": f"Failed to evaluate conversation: {str(e)}"}
